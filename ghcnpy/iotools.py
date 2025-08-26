@@ -5,7 +5,7 @@ import sys
 import requests
 import datetime
 from datetime import date
-
+import pandas as pd
 import numpy as np
 import netCDF4 as nc
 
@@ -166,3 +166,127 @@ def output_to_csv(station_id):
     return None
 
 # The rest of your output_to_netcdf function: just replace any `xrange` with `range` similarly.
+def to_datastructure(station_id):
+    print("\nOUTPUTTING TO DATA STRUCTURE: ", station_id)
+
+    # 5 Elements of GHCN-D
+    num_elements = 5
+    tmax = 0
+    tmin = 1
+    prcp = 2
+    snow = 3
+    snwd = 4
+
+    # Grab Data
+    gp.get_data_station(station_id)
+
+    # Read in GHCN-D Data
+    infile = station_id + ".dly"
+    with open(infile, 'r') as file_handle:
+        ghcnd_contents = file_handle.readlines()
+
+    # Get Year Start and End of File for time dimensions
+    ghcnd_begin_year = int(ghcnd_contents[0][11:15])
+    ghcnd_end_year = int(ghcnd_contents[len(ghcnd_contents) - 1][11:15])
+    num_years = int((ghcnd_end_year - ghcnd_begin_year) + 1)
+
+    # Go through GHCN-D Data
+    ghcnd_data = np.zeros((num_years,12,31,num_elements),dtype='f')-(9999.0)
+
+    for counter in range(len(ghcnd_contents)):
+        element = ghcnd_contents[counter][17:21]
+        if element in ["TMAX", "TMIN", "PRCP", "SNOW", "SNWD"]:
+            if element == "TMAX":
+                element_counter = tmax
+                divisor = 10.0
+            if element == "TMIN":
+                element_counter = tmin
+                divisor = 10.0
+            if element == "PRCP":
+                element_counter = prcp
+                divisor = 10.0
+            if element == "SNOW":
+                element_counter = snow
+                divisor = 1.0
+            if element == "SNWD":
+                element_counter = snwd
+                divisor = 1.0
+
+            year = int(ghcnd_contents[counter][11:15])
+            year_counter = int(year - ghcnd_begin_year)
+            month = int(ghcnd_contents[counter][15:17])
+            month_counter = int(month - 1)
+
+            char = 21
+            for day_counter in range(0, 31):
+                if ghcnd_contents[counter][char:char+5] != "-9999" and ghcnd_contents[counter][char+6:char+7].strip() == "":
+                    ghcnd_data[year_counter,month_counter,day_counter,element_counter] = float(ghcnd_contents[counter][char:char+5]) / divisor
+                char = char + 8
+
+    # Return data as list of arrays instead of writing to CSV
+    data_list = []
+    
+    for year_counter in range(0, num_years):
+        for month_counter in range(0, 12):
+            for day_counter in range(0, 31):
+                # Check if there's any valid data for this date
+                if (ghcnd_data[year_counter,month_counter,day_counter,tmax] != -9999. or
+                    ghcnd_data[year_counter,month_counter,day_counter,tmin] != -9999. or
+                    ghcnd_data[year_counter,month_counter,day_counter,prcp] != -9999. or
+                    ghcnd_data[year_counter,month_counter,day_counter,snow] != -9999. or
+                    ghcnd_data[year_counter,month_counter,day_counter,snwd] != -9999.):
+                    
+                    # Create array for this date: [YYYY, MM, DD, TMAX, TMIN, PRCP, SNOW, SNWD]
+                    date_array = [
+                        year_counter + ghcnd_begin_year,
+                        month_counter + 1,
+                        day_counter + 1,
+                        ghcnd_data[year_counter,month_counter,day_counter,tmax],
+                        ghcnd_data[year_counter,month_counter,day_counter,tmin],
+                        ghcnd_data[year_counter,month_counter,day_counter,prcp],
+                        ghcnd_data[year_counter,month_counter,day_counter,snow],
+                        ghcnd_data[year_counter,month_counter,day_counter,snwd]
+                    ]
+                    data_list.append(date_array)
+    
+    return data_list
+def get_stations_in_datastructure():
+    print("\nGRABBING LATEST STATION METADATA FILE")
+    url = "https://www1.ncdc.noaa.gov/pub/data/ghcn/daily/ghcnd-stations.txt"
+    r = requests.get(url)
+    with open("ghcnd-stations.txt", "wb") as f:
+        f.write(r.content)
+    
+    # Read the station data and return as data structure with index
+    stations_list = []
+    
+    with open("ghcnd-stations.txt", 'r') as file_handle:
+        station_lines = file_handle.readlines()
+    
+    for index, line in enumerate(station_lines):
+        # Parse fixed-width format based on GHCN-D station file specification
+        station_id = line[0:11].strip()
+        latitude = float(line[12:20].strip())
+        longitude = float(line[21:30].strip())
+        elevation = float(line[31:37].strip())
+        station_name = line[41:71].strip()
+        
+        # Optional fields (may be empty)
+        gsn_flag = line[72:75].strip() if len(line) > 72 else ""
+        wmo_id = line[80:85].strip() if len(line) > 80 else ""
+        
+        # Create array for this station with index as first element
+        station_array = [
+            index,                # Index in the file (0, 1, 2, ...)
+            station_id,          # Station ID
+            latitude,            # Latitude
+            longitude,           # Longitude  
+            elevation,           # Elevation in meters
+            station_name,        # Station name
+            gsn_flag,            # GSN flag (if applicable)
+            wmo_id               # WMO ID (if applicable)
+        ]
+        
+        stations_list.append(station_array)
+    
+    return stations_list
