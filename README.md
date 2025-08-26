@@ -93,6 +93,24 @@ gp.output_to_csv('USC00305798')  # Export to CSV
 
 #### Core Data Retrieval Functions
 
+**`to_datastructure("station_id")`**
+```python
+data = gp.to_datastructure("station_id")
+```
+- **Parameters**: `station_id` (str) - 12-character GHCN-D station identifier
+- Processes and exports station data to CSV format
+- **Returns**: a data structure (can later be converted to a pandas dataframe `df = pd.dataFrame(data)`)
+
+**`get_stations_in_datastructure()`**
+```python
+stations = gp.get_stations_in_datastructure()
+```
+- Downloads complete station metadata file
+- **Columns**: Station ID, Latitude, Longitude, Elevation, State, Name
+- **Output**: a datastructure containing all the stations
+
+
+
 **`get_ghcnd_version()`**
 ```python
 version = gp.get_ghcnd_version()
